@@ -22,20 +22,22 @@
  *
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 
 #include "esp_log.h"
-#include "audio_mem.h"
+#include "esp_system.h"
 #include "sdkconfig.h"
 
 #if __has_include("esp_idf_version.h")
 #include "esp_idf_version.h"
-#else
-#define ESP_IDF_VERSION_VAL(major, minor, patch) 0
 #endif
 
 #if CONFIG_BT_ENABLED
@@ -365,6 +367,7 @@ static void bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *pa
     }
     return;
 }
+
 static void bt_a2d_source_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
 {
     ESP_LOGI(TAG, "%s state %d, evt 0x%x", __func__, g_bt_service->source_a2d_state, event);
@@ -378,8 +381,10 @@ static void bt_a2d_source_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param
             if (param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED) {
                 ESP_LOGI(TAG, "a2dp connected");
                 g_bt_service->source_a2d_state = BT_SOURCE_STATE_CONNECTED;
-#if (ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(3, 3, 2))
+#if defined(ESP_IDF_VERSION)
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0))
                 esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+#endif
 #else
                 esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_NONE);
 #endif
@@ -427,21 +432,37 @@ esp_err_t bluetooth_service_start(bluetooth_service_cfg_t *config)
         return ESP_FAIL;
     }
 
-    g_bt_service = audio_calloc(1, sizeof(bluetooth_service_t));
+    g_bt_service = calloc(1, sizeof(bluetooth_service_t));
     AUDIO_MEM_CHECK(TAG, g_bt_service, return ESP_ERR_NO_MEM);
-
+	
+#if defined(CONFIG_BTDM_CONTROLLER_MODE_BR_EDR_ONLY)
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
+#endif
+
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     if (esp_bt_controller_init(&bt_cfg) != ESP_OK) {
         AUDIO_ERROR(TAG, "initialize controller failed");
         return ESP_FAIL;
     }
-
-    if (esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT) != ESP_OK) {
-        AUDIO_ERROR(TAG, "enable controller failed");
+#if defined(CONFIG_BTDM_CONTROLLER_MODE_BTDM)
+    if (esp_bt_controller_enable(ESP_BT_MODE_BTDM) != ESP_OK) {
+        AUDIO_ERROR(TAG, "enable controller (BTDM Mode) failed");
         return ESP_FAIL;
     }
+#endif
+#if defined(CONFIG_BTDM_CONTROLLER_MODE_BLE_ONLY)
+    if (esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK) {
+        AUDIO_ERROR(TAG, "enable controller (BLE Only) failed");
+        return ESP_FAIL;
+    }
+#endif
+#if defined(CONFIG_BTDM_CONTROLLER_MODE_BR_EDR_ONLY)
+    if (esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT) != ESP_OK) {
+        AUDIO_ERROR(TAG, "enable controller (BR_EDR Mode) failed");
+        return ESP_FAIL;
+    }
+#endif
 
     if (esp_bluedroid_init() != ESP_OK) {
         AUDIO_ERROR(TAG, "initialize bluedroid failed");
@@ -497,8 +518,10 @@ esp_err_t bluetooth_service_start(bluetooth_service_cfg_t *config)
     }
 
     /* set discoverable and connectable mode */
-#if (ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(3, 3, 2))
+#if defined(ESP_IDF_VERSION)
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0))
     esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+#endif
 #else
     esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
 #endif
@@ -524,7 +547,7 @@ esp_err_t bluetooth_service_destroy()
         esp_bt_controller_disable();
         esp_bt_controller_deinit();
         esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-        audio_free(g_bt_service);
+        free(g_bt_service);
         g_bt_service = NULL;
     }
     return ESP_OK;
@@ -600,15 +623,15 @@ static void bt_avrc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *
             ESP_LOGD(TAG, "AVRC remote features %x", rc->rmt_feats.feat_mask);
             break;
         }
-
-#if (ESP_IDF_VERSION > ESP_IDF_VERSION_VAL(3, 3, 2))
+#if defined(ESP_IDF_VERSION)
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0))
         case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
             ESP_LOGD(TAG, "remote rn_cap: count %d, bitmask 0x%x", rc->get_rn_caps_rsp.cap_count,
                 rc->get_rn_caps_rsp.evt_set.bits);
             break;
         }
 #endif
-
+#endif
         default:
             ESP_LOGE(TAG, "%s unhandled evt %d", __func__, event);
             break;
