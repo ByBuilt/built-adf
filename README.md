@@ -1,3 +1,9 @@
+# How to update this fork
+
+<https://rick.cogley.info/post/update-your-forked-repository-directly-on-github/#:~:text=Access%20your%20forked%20repository%20on,original%20to%20the%20head%20fork.>
+
+There might be merge conflicts, resolve them to the best of your ability.
+
 # Espressif Audio Development Framework
 
 [![Documentation Status](https://readthedocs.com/projects/espressif-esp-adf/badge/?version=latest)](https://docs.espressif.com/projects/esp-adf/en/latest/?badge=latest)
