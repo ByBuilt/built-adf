@@ -349,6 +349,8 @@ esp_err_t es8388_set_voice_volume(int volume)
     res |= es_write_reg(ES8388_ADDR, ES8388_DACCONTROL25, volume);
     res |= es_write_reg(ES8388_ADDR, ES8388_DACCONTROL26, 0);
     res |= es_write_reg(ES8388_ADDR, ES8388_DACCONTROL27, 0);
+    printf("ESP MONO MODE");
+    res |= es_write_reg(ES8388_ADDR, ES8388_DACCONTROL7, 0x26);
     return res;
 }
 
